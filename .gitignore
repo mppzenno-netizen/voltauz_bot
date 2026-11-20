@@ -1,0 +1,20 @@
+# Ma'lumotlar bazasi (GitHub'ga yuklanmasligi kerak!)
+*.db
+*.sqlite3
+
+# Python kesh fayllari
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Maxfiy muhit o'zgaruvchilari
+.env
+
+# Virtual muhitlar
+venv/
+.venv/
+env/
+
+# IDE va muharrir sozlamalari
+.vscode/
+.idea/
