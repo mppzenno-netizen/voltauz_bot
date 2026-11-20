@@ -1,11 +1,21 @@
 from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, ChatJoinRequest
 from aiogram.filters import CommandStart, Command
 import database as db
 import keyboards as kb
 from utils import check_user_subscriptions
 
 router = Router()
+
+# Foydalanuvchi maxfiy kanalga so'rov yuborgan paytda bot buni eslab qoladi
+@router.chat_join_request()
+async def handle_chat_join_request(event: ChatJoinRequest, bot: Bot):
+    user_id = event.from_user.id
+    channel_id = str(event.chat.id)
+    
+    # Faqat bazada eslab qolamiz: foydalanuvchi kanalga so'rov yubordi!
+    # (Kanalga qo'shilmaydi, odamni kanalga adminning o'zi qo'shadi)
+    await db.add_join_request(user_id, channel_id)
 
 @router.message(CommandStart())
 async def cmd_start(message: Message, bot: Bot):
@@ -15,13 +25,13 @@ async def cmd_start(message: Message, bot: Bot):
     
     await db.add_or_update_user(user_id, username, full_name)
     
-    # Obuna tekshirish
+    # Obunani yoki yuborilgan so'rovni tekshirish
     is_subbed, unsubscribed = await check_user_subscriptions(bot, user_id)
     if not is_subbed:
         text = (
             "👋 <b>Assalomu alaykum, hurmatli foydalanuvchi!</b>\n\n"
-            "⚠️ <b>Botimizdan to'liq foydalanish uchun quyidagi rasmiy homiy kanallarimizga obuna bo'lishingiz shart:</b>\n\n"
-            "<i>Iltimos, kanallarga a'zo bo'lib, so'ng «✅ Obunani tekshirish» tugmasini bosing!</i>"
+            "⚠️ <b>Botimizdan to'liq foydalanish uchun quyidagi rasmiy homiy kanallarimizga obuna bo'ling yoki qo'shilish so'rovini yuboring:</b>\n\n"
+            "<i>(Maxfiy kanalga so'rov yuborsangiz yetarli, so'ng «✅ Obunani tekshirish» tugmasini bosing!)</i>"
         )
         await message.answer(text, reply_markup=kb.get_subscription_keyboard(unsubscribed), parse_mode="HTML")
         return
@@ -44,18 +54,21 @@ async def cb_check_subscription(callback: CallbackQuery, bot: Bot):
     is_subbed, unsubscribed = await check_user_subscriptions(bot, user_id)
     
     if not is_subbed:
-        await callback.answer("⚠️ Hali barcha kanallarga obuna bo'lmadingiz! Iltimos, a'zo bo'ling.", show_alert=True)
+        await callback.answer(
+            "⚠️ Hali barcha kanallarga a'zo bo'lmadingiz yoki so'rov yubormadingiz!\nIltimos, kanallarga kiring va so'rov yuboring.",
+            show_alert=True
+        )
         try:
             await callback.message.edit_reply_markup(reply_markup=kb.get_subscription_keyboard(unsubscribed))
         except Exception:
             pass
         return
         
-    await callback.answer("✅ Obuna tasdiqlandi! Xush kelibsiz!", show_alert=False)
+    await callback.answer("✅ So'rovingiz tasdiqlandi! Xush kelibsiz!", show_alert=False)
     await callback.message.delete()
     
     welcome_text = (
-        f"🎉 <b>Ajoyib! Obuna muvaffaqiyatli tasdiqlandi.</b>\n\n"
+        f"🎉 <b>Ajoyib! Obunangiz tasdiqlandi.</b>\n\n"
         "🎮 <b>Botdan to'liq foydalanishingiz mumkin! Quyidagi menyudan kerakli bo'limni tanlang:</b>"
     )
     await callback.message.answer(welcome_text, reply_markup=kb.get_main_keyboard(user_id), parse_mode="HTML")

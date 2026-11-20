@@ -99,7 +99,7 @@ async def main():
     await db.init_db()
     logger.info("Ma'lumotlar bazasi muvaffaqiyatli ishga tushdi.")
     
-    # 2. Render Web Service uchun port ochish (Timeout xatosini oldini oladi)
+    # 2. Render Web Service uchun port ochish
     await start_dummy_webserver()
     
     # 3. Bot va Dispatcher yaratish
@@ -122,8 +122,11 @@ async def main():
     bot_info = await bot.get_me()
     logger.info(f"Bot muvaffaqiyatli ishga tushdi: @{bot_info.username} (ID: {bot_info.id})")
     
-    # Pollingni boshlash
-    await dp.start_polling(bot)
+    # Pollingni boshlash (chat_join_request ni ham tinglash)
+    await dp.start_polling(
+        bot,
+        allowed_updates=["message", "callback_query", "chat_join_request"]
+    )
 
 if __name__ == "__main__":
     try:

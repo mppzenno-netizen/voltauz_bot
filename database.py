@@ -68,6 +68,17 @@ async def init_db():
                 url TEXT NOT NULL
             )
         """)
+
+        # Maxfiy kanallarga a'zo bo'lish so'rovlari (Join requests) jadvali
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS join_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                channel_id TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, channel_id)
+            )
+        """)
         
         await db.commit()
 
@@ -252,43 +263,55 @@ async def delete_channel(channel_id: str):
         await db.execute("DELETE FROM channels WHERE channel_id = ?", (channel_id,))
         await db.commit()
 
+# --- So'rovlar (Join Requests) ---
+async def add_join_request(user_id: int, channel_id: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT OR IGNORE INTO join_requests (user_id, channel_id) VALUES (?, ?)",
+            (user_id, str(channel_id))
+        )
+        await db.commit()
+
+async def has_sent_join_request(user_id: int, channel_id: str) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        # channel_id -100 li yoki oddiy string bo'lishi mumkin
+        ch_str = str(channel_id)
+        async with db.execute(
+            "SELECT id FROM join_requests WHERE user_id = ? AND (channel_id = ? OR channel_id = ?)",
+            (user_id, ch_str, ch_str.replace("-100", "-"))
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row is not None
+
 # --- Statistika ---
 async def get_system_statistics():
     async with aiosqlite.connect(DB_PATH) as db:
-        # Jami foydalanuvchilar
         async with db.execute("SELECT COUNT(*) FROM users") as c:
             total_users = (await c.fetchone())[0]
             
-        # Bugun qo'shilganlar
         async with db.execute("SELECT COUNT(*) FROM users WHERE DATE(created_at) = DATE('now', 'localtime')") as c:
             today_users = (await c.fetchone())[0]
             
-        # To'lov qilgan noyob foydalanuvchilar soni
         async with db.execute("SELECT COUNT(DISTINCT user_id) FROM payments WHERE status = 'paid'") as c:
             paid_users_count = (await c.fetchone())[0]
             
-        # Jami oylik tushum (shu oyda)
         async with db.execute("""
             SELECT COALESCE(SUM(amount), 0) FROM payments 
             WHERE status = 'paid' AND strftime('%Y-%m', updated_at) = strftime('%Y-%m', 'now', 'localtime')
         """) as c:
             monthly_income = (await c.fetchone())[0]
             
-        # Umumiy tushum
         async with db.execute("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE status = 'paid'") as c:
             total_income = (await c.fetchone())[0]
             
-        # Jami o'yinlar
         async with db.execute("SELECT COUNT(*) FROM games") as c:
             total_games = (await c.fetchone())[0]
             
-        # Pullik va tekin o'yinlar
         async with db.execute("SELECT COUNT(*) FROM games WHERE category = 'paid'") as c:
             paid_games = (await c.fetchone())[0]
         async with db.execute("SELECT COUNT(*) FROM games WHERE category = 'free'") as c:
             free_games = (await c.fetchone())[0]
 
-        # Jami xaridlar soni
         async with db.execute("SELECT COUNT(*) FROM purchases") as c:
             total_purchases = (await c.fetchone())[0]
             
