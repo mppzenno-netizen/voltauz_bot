@@ -1,9 +1,11 @@
 import asyncio
 import logging
+import os
 import sys
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from aiohttp import web
 from config import BOT_TOKEN, ADMIN_IDS
 import database as db
 from handlers.user_handlers import router as user_router
@@ -25,8 +27,6 @@ logger = logging.getLogger(__name__)
 async def background_payment_checker(bot: Bot):
     """
     Orqa fonda har 15 soniyada pending to'lovlarni avtomatik tekshiruvchi funksiya.
-    Foydalanuvchi tekshirish tugmasini bosmasa ham, to'lov tushishi bilan
-    avtomatik ravishda balansi to'ldiriladi!
     """
     logger.info("Avtomatik to'lov tekshiruvchi fon xizmati ishga tushdi.")
     while True:
@@ -46,7 +46,6 @@ async def background_payment_checker(bot: Bot):
                         await db.update_user_balance(user_id, amount)
                         user = await db.get_user(user_id)
                         
-                        # Foydalanuvchiga xabar
                         try:
                             msg = (
                                 "🎉 <b>HISOBINGIZ TO'LDIRILDI!</b>\n\n"
@@ -58,7 +57,6 @@ async def background_payment_checker(bot: Bot):
                         except Exception as e:
                             logger.error(f"Foydalanuvchiga xabar yuborishda xatolik: {e}")
                             
-                        # Adminga bildirishnoma
                         for admin_id in ADMIN_IDS:
                             try:
                                 admin_notice = (
@@ -79,12 +77,32 @@ async def background_payment_checker(bot: Bot):
             
         await asyncio.sleep(15)
 
+# Render Web Service uchun port ochuvchi mini veb-server
+async def start_dummy_webserver():
+    port = int(os.getenv("PORT", 10000))
+    app = web.Application()
+    
+    async def handle_ping(request):
+        return web.Response(text="Bot is running smoothly 24/7!")
+        
+    app.router.add_get("/", handle_ping)
+    app.router.add_get("/health", handle_ping)
+    
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    logger.info(f"Render uchun Web server {port}-portda muvaffaqiyatli ishga tushdi.")
+
 async def main():
-    # Bazani ishga tushirish
+    # 1. Bazani ishga tushirish
     await db.init_db()
     logger.info("Ma'lumotlar bazasi muvaffaqiyatli ishga tushdi.")
     
-    # Bot va Dispatcher yaratish
+    # 2. Render Web Service uchun port ochish (Timeout xatosini oldini oladi)
+    await start_dummy_webserver()
+    
+    # 3. Bot va Dispatcher yaratish
     bot = Bot(
         token=BOT_TOKEN,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML)
@@ -97,7 +115,7 @@ async def main():
     dp.include_router(games_router)
     dp.include_router(payment_router)
     
-    # Orqa fon to'lov tekshiruvchisini ishga tushirish
+    # Fon vazifasini ishga tushirish
     asyncio.create_task(background_payment_checker(bot))
     
     # Bot ma'lumotlarini olish
